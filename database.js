@@ -1,7 +1,8 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-const dbPath = path.join(__dirname, 'journal.db');
+// Allow overriding DB location (for persistent disks in production)
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'journal.db');
 
 function initDatabase() {
   return new Promise((resolve, reject) => {
