@@ -1,279 +1,200 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-// Allow overriding DB location (for persistent disks in production)
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'journal.db');
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false }
+});
 
-function initDatabase() {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath, (err) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      console.log('Connected to SQLite database');
-    });
-
-    db.serialize(() => {
-      db.run(`CREATE TABLE IF NOT EXISTS entries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        date TEXT NOT NULL,
-        activity_type TEXT,
-        activity_amount TEXT,
-        activity_other TEXT,
-        sugar_consumed REAL,
-        snacks_count INTEGER,
-        sleep_time TEXT,
-        wake_time TEXT,
-        studying_done INTEGER DEFAULT 0,
-        studying_length TEXT,
-        social_media_time TEXT,
-        water_bottle_twice INTEGER DEFAULT 0,
-        work_done INTEGER DEFAULT 0,
-        volunteer_done INTEGER DEFAULT 0,
-        volunteer_hours REAL DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(db);
-        }
-      });
-      // Add new columns for existing databases; errors are ignored if they already exist
-      const alterStatements = [
-        'ALTER TABLE entries ADD COLUMN activity_other TEXT',
-        'ALTER TABLE entries ADD COLUMN work_done INTEGER DEFAULT 0',
-        'ALTER TABLE entries ADD COLUMN volunteer_done INTEGER DEFAULT 0',
-        'ALTER TABLE entries ADD COLUMN volunteer_hours REAL DEFAULT 0'
-      ];
-      alterStatements.forEach(stmt => {
-        db.run(stmt, () => {});
-      });
-    });
-  });
+async function initDatabase() {
+  const createTableSQL = `
+    CREATE TABLE IF NOT EXISTS entries (
+      id SERIAL PRIMARY KEY,
+      date DATE NOT NULL,
+      activity_type TEXT,
+      activity_amount TEXT,
+      activity_other TEXT,
+      sugar_consumed REAL DEFAULT 0,
+      snacks_count INTEGER DEFAULT 0,
+      sleep_time TEXT,
+      wake_time TEXT,
+      studying_done BOOLEAN DEFAULT false,
+      studying_length TEXT,
+      social_media_time TEXT,
+      water_bottle_twice BOOLEAN DEFAULT false,
+      work_done BOOLEAN DEFAULT false,
+      volunteer_done BOOLEAN DEFAULT false,
+      volunteer_hours REAL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `;
+  await pool.query(createTableSQL);
+  console.log('Connected to PostgreSQL and ensured schema exists');
 }
 
-function insertEntry(entry) {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath);
-    const sql = `INSERT INTO entries (
+async function insertEntry(entry) {
+  const sql = `
+    INSERT INTO entries (
       date, activity_type, activity_amount, activity_other, sugar_consumed, snacks_count,
       sleep_time, wake_time, studying_done, studying_length,
       social_media_time, water_bottle_twice, work_done, volunteer_done, volunteer_hours
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    
-    db.run(sql, [
-      entry.date,
-      entry.activity_type || null,
-      entry.activity_amount || null,
-      entry.activity_other || null,
-      entry.sugar_consumed || 0,
-      entry.snacks_count || 0,
-      entry.sleep_time || null,
-      entry.wake_time || null,
-      entry.studying_done ? 1 : 0,
-      entry.studying_length || null,
-      entry.social_media_time || null,
-      entry.water_bottle_twice ? 1 : 0,
-      entry.work_done ? 1 : 0,
-      entry.volunteer_done ? 1 : 0,
-      entry.volunteer_hours || 0
-    ], function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ id: this.lastID, ...entry });
-      }
-      db.close();
-    });
-  });
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    RETURNING id;
+  `;
+  const params = [
+    entry.date,
+    entry.activity_type || null,
+    entry.activity_amount || null,
+    entry.activity_other || null,
+    entry.sugar_consumed || 0,
+    entry.snacks_count || 0,
+    entry.sleep_time || null,
+    entry.wake_time || null,
+    !!entry.studying_done,
+    entry.studying_length || null,
+    entry.social_media_time || null,
+    !!entry.water_bottle_twice,
+    !!entry.work_done,
+    !!entry.volunteer_done,
+    entry.volunteer_hours || 0
+  ];
+  const result = await pool.query(sql, params);
+  return { id: result.rows[0].id, ...entry };
 }
 
-function getAllEntries() {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath);
-    db.all('SELECT * FROM entries ORDER BY date DESC, created_at DESC', (err, rows) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(rows.map(row => ({
-          ...row,
-          studying_done: row.studying_done === 1,
-          water_bottle_twice: row.water_bottle_twice === 1,
-          work_done: row.work_done === 1,
-          volunteer_done: row.volunteer_done === 1,
-          volunteer_hours: row.volunteer_hours || 0
-        })));
-      }
-      db.close();
-    });
-  });
+async function getAllEntries() {
+  const result = await pool.query('SELECT * FROM entries ORDER BY date DESC, created_at DESC');
+  return result.rows.map(row => ({
+    ...row,
+    studying_done: row.studying_done === true,
+    water_bottle_twice: row.water_bottle_twice === true,
+    work_done: row.work_done === true,
+    volunteer_done: row.volunteer_done === true,
+    volunteer_hours: row.volunteer_hours || 0
+  }));
 }
 
-function updateEntry(id, entry) {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath);
-    const sql = `UPDATE entries SET
-      date = ?, activity_type = ?, activity_amount = ?, activity_other = ?,
-      sugar_consumed = ?, snacks_count = ?, sleep_time = ?, wake_time = ?,
-      studying_done = ?, studying_length = ?, social_media_time = ?,
-      water_bottle_twice = ?, work_done = ?, volunteer_done = ?, volunteer_hours = ?
-      WHERE id = ?`;
-    const params = [
-      entry.date,
-      entry.activity_type || null,
-      entry.activity_amount || null,
-      entry.activity_other || null,
-      entry.sugar_consumed || 0,
-      entry.snacks_count || 0,
-      entry.sleep_time || null,
-      entry.wake_time || null,
-      entry.studying_done ? 1 : 0,
-      entry.studying_length || null,
-      entry.social_media_time || null,
-      entry.water_bottle_twice ? 1 : 0,
-      entry.work_done ? 1 : 0,
-      entry.volunteer_done ? 1 : 0,
-      entry.volunteer_hours || 0,
-      id
-    ];
-    db.run(sql, params, function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ changes: this.changes });
-      }
-      db.close();
-    });
-  });
+async function updateEntry(id, entry) {
+  const sql = `
+    UPDATE entries SET
+      date = $1,
+      activity_type = $2,
+      activity_amount = $3,
+      activity_other = $4,
+      sugar_consumed = $5,
+      snacks_count = $6,
+      sleep_time = $7,
+      wake_time = $8,
+      studying_done = $9,
+      studying_length = $10,
+      social_media_time = $11,
+      water_bottle_twice = $12,
+      work_done = $13,
+      volunteer_done = $14,
+      volunteer_hours = $15
+    WHERE id = $16;
+  `;
+  const params = [
+    entry.date,
+    entry.activity_type || null,
+    entry.activity_amount || null,
+    entry.activity_other || null,
+    entry.sugar_consumed || 0,
+    entry.snacks_count || 0,
+    entry.sleep_time || null,
+    entry.wake_time || null,
+    !!entry.studying_done,
+    entry.studying_length || null,
+    entry.social_media_time || null,
+    !!entry.water_bottle_twice,
+    !!entry.work_done,
+    !!entry.volunteer_done,
+    entry.volunteer_hours || 0,
+    id
+  ];
+  const result = await pool.query(sql, params);
+  return { changes: result.rowCount };
 }
 
-function deleteEntry(id) {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath);
-    db.run('DELETE FROM entries WHERE id = ?', [id], function(err) {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ changes: this.changes });
-      }
-      db.close();
-    });
-  });
+async function deleteEntry(id) {
+  const result = await pool.query('DELETE FROM entries WHERE id = $1', [id]);
+  return { changes: result.rowCount };
 }
 
-function getStatistics() {
-  return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(dbPath);
-    
-    Promise.all([
-      // Total entries
-      new Promise((res, rej) => {
-        db.get('SELECT COUNT(*) as count FROM entries', (err, row) => {
-          if (err) rej(err);
-          else res(row.count);
-        });
-      }),
-      // Activity stats
-      new Promise((res, rej) => {
-        db.all(`SELECT activity_type, COUNT(*) as count 
-                FROM entries 
-                WHERE activity_type IS NOT NULL 
-                GROUP BY activity_type`, (err, rows) => {
-          if (err) rej(err);
-          else res(rows);
-        });
-      }),
-      // Average sugar
-      new Promise((res, rej) => {
-        db.get('SELECT AVG(sugar_consumed) as avg FROM entries WHERE sugar_consumed > 0', (err, row) => {
-          if (err) rej(err);
-          else res(row.avg || 0);
-        });
-      }),
-      // Average snacks
-      new Promise((res, rej) => {
-        db.get('SELECT AVG(snacks_count) as avg FROM entries WHERE snacks_count > 0', (err, row) => {
-          if (err) rej(err);
-          else res(row.avg || 0);
-        });
-      }),
-      // Studying days
-      new Promise((res, rej) => {
-        db.get('SELECT COUNT(*) as count FROM entries WHERE studying_done = 1', (err, row) => {
-          if (err) rej(err);
-          else res(row.count);
-        });
-      }),
-      // Water bottle days
-      new Promise((res, rej) => {
-        db.get('SELECT COUNT(*) as count FROM entries WHERE water_bottle_twice = 1', (err, row) => {
-          if (err) rej(err);
-          else res(row.count);
-        });
-      }),
-      // Work days and earnings
-      new Promise((res, rej) => {
-        db.get('SELECT COUNT(*) as count FROM entries WHERE work_done = 1', (err, row) => {
-          if (err) rej(err);
-          else res(row.count);
-        });
-      }),
-      // Volunteer totals
-      new Promise((res, rej) => {
-        db.get('SELECT COUNT(*) as days, SUM(volunteer_hours) as hours FROM entries WHERE volunteer_done = 1', (err, row) => {
-          if (err) rej(err);
-          else res({ days: row.days || 0, hours: row.hours || 0 });
-        });
-      }),
-      // Average sleep duration (if we have both sleep and wake times)
-      new Promise((res, rej) => {
-        db.all(`SELECT sleep_time, wake_time FROM entries 
-                WHERE sleep_time IS NOT NULL AND wake_time IS NOT NULL`, (err, rows) => {
-          if (err) rej(err);
-          else {
-            const durations = rows.map(row => {
-              const sleep = parseTime(row.sleep_time);
-              const wake = parseTime(row.wake_time);
-              if (sleep && wake) {
-                let diff = wake - sleep;
-                if (diff < 0) diff += 24; // Handle overnight
-                return diff;
-              }
-              return null;
-            }).filter(d => d !== null);
-            const avg = durations.length > 0 
-              ? durations.reduce((a, b) => a + b, 0) / durations.length 
-              : 0;
-            res(avg);
-          }
-        });
-      })
-    ]).then(([totalEntries, activityStats, avgSugar, avgSnacks, studyingDays, waterDays, workDays, volunteerTotals, avgSleep]) => {
-      resolve({
-        totalEntries,
-        activityStats,
-        avgSugar: Math.round(avgSugar * 100) / 100,
-        avgSnacks: Math.round(avgSnacks * 100) / 100,
-        studyingDays,
-        waterDays,
-        workDays,
-        totalEarnings: workDays * 45,
-        volunteerDays: volunteerTotals.days,
-        volunteerHours: Math.round(volunteerTotals.hours * 100) / 100,
-        avgSleep: Math.round(avgSleep * 100) / 100
-      });
-      db.close();
-    }).catch(reject);
-  });
+async function getStatistics() {
+  const [
+    totalEntriesRes,
+    activityStatsRes,
+    avgSugarRes,
+    avgSnacksRes,
+    studyingDaysRes,
+    waterDaysRes,
+    workDaysRes,
+    volunteerTotalsRes,
+    sleepRowsRes
+  ] = await Promise.all([
+    pool.query('SELECT COUNT(*)::int AS count FROM entries'),
+    pool.query(`
+      SELECT activity_type, COUNT(*)::int AS count
+      FROM entries
+      WHERE activity_type IS NOT NULL
+      GROUP BY activity_type
+    `),
+    pool.query('SELECT AVG(sugar_consumed)::float AS avg FROM entries WHERE sugar_consumed > 0'),
+    pool.query('SELECT AVG(snacks_count)::float AS avg FROM entries WHERE snacks_count > 0'),
+    pool.query('SELECT COUNT(*)::int AS count FROM entries WHERE studying_done = true'),
+    pool.query('SELECT COUNT(*)::int AS count FROM entries WHERE water_bottle_twice = true'),
+    pool.query('SELECT COUNT(*)::int AS count FROM entries WHERE work_done = true'),
+    pool.query('SELECT COUNT(*)::int AS days, COALESCE(SUM(volunteer_hours),0)::float AS hours FROM entries WHERE volunteer_done = true'),
+    pool.query('SELECT sleep_time, wake_time FROM entries WHERE sleep_time IS NOT NULL AND wake_time IS NOT NULL')
+  ]);
+
+  const totalEntries = totalEntriesRes.rows[0].count || 0;
+  const activityStats = activityStatsRes.rows;
+  const avgSugar = parseFloat(avgSugarRes.rows[0].avg) || 0;
+  const avgSnacks = parseFloat(avgSnacksRes.rows[0].avg) || 0;
+  const studyingDays = studyingDaysRes.rows[0].count || 0;
+  const waterDays = waterDaysRes.rows[0].count || 0;
+  const workDays = workDaysRes.rows[0].count || 0;
+  const volunteerDays = volunteerTotalsRes.rows[0].days || 0;
+  const volunteerHours = parseFloat(volunteerTotalsRes.rows[0].hours) || 0;
+
+  const durations = sleepRowsRes.rows
+    .map(row => {
+      const sleep = parseTime(row.sleep_time);
+      const wake = parseTime(row.wake_time);
+      if (sleep != null && wake != null) {
+        let diff = wake - sleep;
+        if (diff < 0) diff += 24;
+        return diff;
+      }
+      return null;
+    })
+    .filter(d => d != null);
+
+  const avgSleep = durations.length
+    ? durations.reduce((a, b) => a + b, 0) / durations.length
+    : 0;
+
+  return {
+    totalEntries,
+    activityStats,
+    avgSugar: Math.round(avgSugar * 100) / 100,
+    avgSnacks: Math.round(avgSnacks * 100) / 100,
+    studyingDays,
+    waterDays,
+    workDays,
+    totalEarnings: workDays * 45,
+    volunteerDays,
+    volunteerHours: Math.round(volunteerHours * 100) / 100,
+    avgSleep: Math.round(avgSleep * 100) / 100
+  };
 }
 
 function parseTime(timeStr) {
   if (!timeStr) return null;
   const match = timeStr.match(/(\d+):(\d+)/);
   if (match) {
-    return parseInt(match[1]) + parseInt(match[2]) / 60;
+    return parseInt(match[1], 10) + parseInt(match[2], 10) / 60;
   }
   return null;
 }

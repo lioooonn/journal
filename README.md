@@ -48,7 +48,7 @@ A beautiful web application to track your daily progress toward your New Year's 
 ```
 journal/
 ├── server.js          # Express server and API routes
-├── database.js        # SQLite database setup and queries
+├── database.js        # PostgreSQL database setup and queries
 ├── package.json       # Dependencies and scripts
 ├── public/           # Frontend files
 │   ├── index.html    # Entry form page
@@ -56,7 +56,6 @@ journal/
 │   ├── entry.js      # Entry form logic
 │   ├── progress.js   # Dashboard logic
 │   └── styles.css    # Styling
-└── journal.db        # SQLite database (created automatically)
 ```
 
 ## API Endpoints
@@ -67,12 +66,12 @@ journal/
 
 ## Database
 
-The application uses SQLite for data storage. The database file (`journal.db`) is created automatically on first run. All entries are stored with timestamps and can be queried for statistics.
+The application uses **PostgreSQL** for data storage (locally or on Render's free PostgreSQL). Tables are created automatically on first run. All entries are stored with timestamps and can be queried for statistics.
 
 ## Technologies Used
 
 - **Backend**: Node.js, Express
-- **Database**: SQLite3
+- **Database**: PostgreSQL (`pg` client)
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Styling**: Modern CSS with gradients and animations
 
@@ -82,19 +81,18 @@ This application requires a Node.js hosting service (not GitHub Pages, which onl
 
 ### Deploy to Render (Free)
 
-1. Go to [render.com](https://render.com) and sign up/login
-2. Click "New +" → "Web Service"
-3. Connect your GitHub repository: `lioooonn/journal`
-4. Configure:
+1. Go to [render.com](https://render.com) and sign up/login  
+2. Create a new **PostgreSQL** instance (free tier)  
+3. Create a new **Web Service** from your GitHub repo `lioooonn/journal`  
+4. In the Web Service settings, under **Environment**, ensure `DATABASE_URL` is set (Render can auto-link it from the Postgres instance)  
+5. Configure:
    - **Name**: journal-tracker (or any name)
    - **Environment**: Node
    - **Build Command**: `npm install`
    - **Start Command**: `npm start`
    - **Plan**: Free
-5. Click "Create Web Service"
-6. Your app will be live at `https://journal-tracker.onrender.com` (or your custom domain)
-
-The SQLite database will persist on Render's disk. Note: Free tier services may spin down after inactivity.
+6. Click "Create Web Service"
+7. Your app will be live at `https://journal-tracker.onrender.com` (or your custom domain). Data now lives in PostgreSQL and survives deploys.
 
 ### Deploy to Railway (Free)
 
