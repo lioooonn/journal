@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Progress Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Progress Dashboard</h1>
+    <p class="subtitle">Track your resolution progress and statistics</p>
+    
+    <div class="nav">
+      <a href="/">New Entry</a>
+      <a href="/progress">View Progress</a>
+    </div>
+
+    <div id="loading" style="text-align: center; padding: 40px; color: #666;">
+      Loading statistics...
+    </div>
+
+    <div id="stats-container" style="display: none;">
+      <h2 style="margin-bottom: 20px; color: #667eea;">Overall Statistics</h2>
+      <div class="stats-grid" id="stats-grid"></div>
+
+      <div class="activity-chart">
+        <h3 style="margin-bottom: 15px; color: #667eea;">Activity Breakdown</h3>
+        <div id="activity-chart"></div>
+      </div>
+
+      <div class="entries-list">
+        <h2 style="margin-bottom: 20px; color: #667eea; margin-top: 30px;">Recent Entries</h2>
+        <div id="entries-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="progress.js"></script>
+</body>
+</html>

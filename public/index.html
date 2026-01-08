@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Journal Entry</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>📝 Daily Journal Entry</h1>
+    <p class="subtitle">Track your New Year's resolutions progress</p>
+    
+    <div class="nav">
+      <a href="/">New Entry</a>
+      <a href="/progress">View Progress</a>
+    </div>
+
+    <div id="message"></div>
+
+    <form id="journalForm">
+      <div class="form-group">
+        <label for="date">Date *</label>
+        <input type="date" id="date" name="date" required>
+      </div>
+
+      <div class="form-group">
+        <label>Daily Activity</label>
+        <div class="activity-row">
+          <select id="activity_type" name="activity_type">
+            <option value="">Select activity...</option>
+            <option value="Gym">Gym</option>
+            <option value="Sport">Sport</option>
+            <option value="Run">Run</option>
+            <option value="Bike">Bike</option>
+            <option value="Pushups">Pushups</option>
+            <option value="Sit-ups">Sit-ups</option>
+          </select>
+          <input type="text" id="activity_amount" name="activity_amount" placeholder="Length/Amount (e.g., 30 min, 50 reps)">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="sugar_consumed">Amount of Sugar Consumed (grams)</label>
+        <input type="number" id="sugar_consumed" name="sugar_consumed" min="0" step="0.1" placeholder="0">
+      </div>
+
+      <div class="form-group">
+        <label for="snacks_count">Number of Snacks Eaten</label>
+        <input type="number" id="snacks_count" name="snacks_count" min="0" placeholder="0">
+      </div>
+
+      <div class="form-group">
+        <label>Sleep Times</label>
+        <div class="activity-row">
+          <div>
+            <label for="sleep_time" style="font-size: 0.9em; color: #666;">Sleep Time</label>
+            <input type="time" id="sleep_time" name="sleep_time">
+          </div>
+          <div>
+            <label for="wake_time" style="font-size: 0.9em; color: #666;">Wake Time</label>
+            <input type="time" id="wake_time" name="wake_time">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="studying_done" name="studying_done">
+          <label for="studying_done" style="margin: 0;">Studying/Homework Done</label>
+        </div>
+        <input type="text" id="studying_length" name="studying_length" placeholder="Length (e.g., 2 hours)" style="margin-top: 10px;">
+      </div>
+
+      <div class="form-group">
+        <label for="social_media_time">Social Media Usage (time)</label>
+        <input type="text" id="social_media_time" name="social_media_time" placeholder="e.g., 1.5 hours, 45 min">
+      </div>
+
+      <div class="form-group">
+        <div class="checkbox-group">
+          <input type="checkbox" id="water_bottle_twice" name="water_bottle_twice">
+          <label for="water_bottle_twice" style="margin: 0;">Finished drinking water bottle twice</label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn">Save Entry</button>
+    </form>
+  </div>
+
+  <script src="entry.js"></script>
+</body>
+</html>
