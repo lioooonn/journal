@@ -1,26 +1,45 @@
+import { auth, db } from './firebase.js';
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  doc,
+  updateDoc,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+let currentUser = null;
+
 document.addEventListener('DOMContentLoaded', () => {
-  loadStatistics();
-  loadEntries();
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    // Reload entries when auth changes so edit/delete buttons update
+    loadEntriesAndStats();
+  });
+  loadEntriesAndStats();
 });
 
-async function loadStatistics() {
+async function loadEntriesAndStats() {
   try {
-    const response = await fetch('/api/stats');
-    const stats = await response.json();
-    displayStatistics(stats);
-  } catch (error) {
-    console.error('Error loading statistics:', error);
-    document.getElementById('loading').textContent = 'Failed to load statistics';
-  }
-}
+    const q = query(
+      collection(db, 'entries'),
+      orderBy('date', 'desc'),
+      orderBy('created_at', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    const entries = snapshot.docs.map(docSnap => ({
+      id: docSnap.id,
+      ...docSnap.data()
+    }));
 
-async function loadEntries() {
-  try {
-    const response = await fetch('/api/entries');
-    const entries = await response.json();
+    const stats = computeStatistics(entries);
+    displayStatistics(stats);
     displayEntries(entries);
   } catch (error) {
-    console.error('Error loading entries:', error);
+    console.error('Error loading entries/stats:', error);
+    document.getElementById('loading').textContent = 'Failed to load data';
   }
 }
 
@@ -98,7 +117,7 @@ function displayStatistics(stats) {
 
 function displayEntries(entries) {
   const entriesList = document.getElementById('entries-list');
-  const adminToken = localStorage.getItem('adminToken');
+  const isAdmin = !!currentUser;
   
   if (entries.length === 0) {
     entriesList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No entries yet. Start tracking your progress!</p>';
@@ -143,7 +162,7 @@ function displayEntries(entries) {
         <div class="entry-details">
           ${details.join('')}
         </div>
-        ${adminToken ? `
+        ${isAdmin ? `
           <div style="margin-top: 10px; display:flex; gap:10px; flex-wrap:wrap;">
             <button class="btn" style="padding:10px 20px; width:auto; background:#667eea;" data-action="edit" data-id="${entry.id}">Edit</button>
             <button class="btn" style="padding:10px 20px; width:auto; background:#d9534f;" data-action="delete" data-id="${entry.id}">Delete</button>
@@ -153,7 +172,7 @@ function displayEntries(entries) {
     `;
   }).join('');
 
-  if (adminToken) {
+  if (isAdmin) {
     entriesList.querySelectorAll('button[data-action="edit"]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
@@ -194,8 +213,7 @@ function formatDate(dateStr) {
 }
 
 async function handleEdit(entry) {
-  const adminToken = localStorage.getItem('adminToken');
-  if (!adminToken) {
+  if (!currentUser) {
     alert('Login as admin first.');
     return;
   }
@@ -230,19 +248,9 @@ async function handleEdit(entry) {
   updated.volunteer_hours = volHours === null || volHours === '' ? entry.volunteer_hours : parseFloat(volHours) || 0;
 
   try {
-    const response = await fetch(`/api/entries/${entry.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
-      body: JSON.stringify(updated)
-    });
-    if (!response.ok) {
-      throw new Error('Failed to update entry');
-    }
-    await loadEntries();
-    await loadStatistics();
+    const ref = doc(db, 'entries', entry.id);
+    await updateDoc(ref, updated);
+    await loadEntriesAndStats();
     alert('Entry updated');
   } catch (error) {
     console.error(error);
@@ -251,22 +259,98 @@ async function handleEdit(entry) {
 }
 
 async function handleDelete(id) {
-  const adminToken = localStorage.getItem('adminToken');
-  if (!adminToken) {
+  if (!currentUser) {
     alert('Login as admin first.');
     return;
   }
   if (!confirm('Delete this entry?')) return;
   try {
-    const response = await fetch(`/api/entries/${id}`, {
-      method: 'DELETE',
-      headers: { 'x-admin-token': adminToken }
-    });
-    if (!response.ok) throw new Error('Failed to delete');
-    await loadEntries();
-    await loadStatistics();
+    const ref = doc(db, 'entries', id);
+    await deleteDoc(ref);
+    await loadEntriesAndStats();
   } catch (error) {
     console.error(error);
     alert('Delete failed');
   }
+}
+
+function computeStatistics(entries) {
+  const totalEntries = entries.length;
+
+  const activityCounts = {};
+  let sugarSum = 0;
+  let sugarCount = 0;
+  let snacksSum = 0;
+  let snacksCount = 0;
+  let studyingDays = 0;
+  let waterDays = 0;
+  let workDays = 0;
+  let volunteerDays = 0;
+  let volunteerHours = 0;
+  const sleepDurations = [];
+
+  for (const e of entries) {
+    if (e.activity_type) {
+      const key = e.activity_type;
+      activityCounts[key] = (activityCounts[key] || 0) + 1;
+    }
+    if (e.sugar_consumed && e.sugar_consumed > 0) {
+      sugarSum += e.sugar_consumed;
+      sugarCount += 1;
+    }
+    if (e.snacks_count && e.snacks_count > 0) {
+      snacksSum += e.snacks_count;
+      snacksCount += 1;
+    }
+    if (e.studying_done) studyingDays += 1;
+    if (e.water_bottle_twice) waterDays += 1;
+    if (e.work_done) workDays += 1;
+    if (e.volunteer_done) {
+      volunteerDays += 1;
+      if (e.volunteer_hours) volunteerHours += e.volunteer_hours;
+    }
+    if (e.sleep_time && e.wake_time) {
+      const sleep = parseTime(e.sleep_time);
+      const wake = parseTime(e.wake_time);
+      if (sleep != null && wake != null) {
+        let diff = wake - sleep;
+        if (diff < 0) diff += 24;
+        sleepDurations.push(diff);
+      }
+    }
+  }
+
+  const activityStats = Object.keys(activityCounts).map(type => ({
+    activity_type: type,
+    count: activityCounts[type]
+  }));
+
+  const avgSugar = sugarCount ? sugarSum / sugarCount : 0;
+  const avgSnacks = snacksCount ? snacksSum / snacksCount : 0;
+  const avgSleep = sleepDurations.length
+    ? sleepDurations.reduce((a, b) => a + b, 0) / sleepDurations.length
+    : 0;
+
+  return {
+    totalEntries,
+    activityStats,
+    avgSugar: Math.round(avgSugar * 100) / 100,
+    avgSnacks: Math.round(avgSnacks * 100) / 100,
+    studyingDays,
+    waterDays,
+    workDays,
+    totalEarnings: workDays * 45,
+    volunteerDays,
+    volunteerHours: Math.round(volunteerHours * 100) / 100,
+    avgSleep: Math.round(avgSleep * 100) / 100
+  };
+}
+
+function parseTime(timeStr) {
+  if (!timeStr) return null;
+  const match = timeStr.match(/(\d+):(\d+)/);
+  if (match) {
+    return parseInt(match[1], 10) + parseInt(match[2], 10) / 60;
+  }
+  return null;
 }

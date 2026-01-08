@@ -1,30 +1,34 @@
+import { auth } from './firebase.js';
+import {
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('loginForm');
   form.addEventListener('submit', handleLogin);
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      showMessage('Already logged in.', 'success');
+    }
+  });
 });
 
 async function handleLogin(e) {
   e.preventDefault();
+  const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value.trim();
-  if (!password) return;
+  if (!email || !password) return;
 
   try {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      showMessage(data.error || 'Login failed', 'error');
-      return;
-    }
-    localStorage.setItem('adminToken', data.token);
+    await signInWithEmailAndPassword(auth, email, password);
     showMessage('Login successful! Redirecting...', 'success');
     setTimeout(() => window.location.href = '/', 800);
   } catch (err) {
     console.error(err);
-    showMessage('Login failed. Try again.', 'error');
+    showMessage('Login failed. Check your email/password.', 'error');
   }
 }
 

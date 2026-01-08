@@ -1,3 +1,18 @@
+import { auth, db } from './firebase.js';
+import {
+  collection,
+  addDoc,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+let currentUser = null;
+
+// Track auth state
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+});
+
 // Set today's date as default
 document.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById('date');
@@ -30,8 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function handleSubmit(e) {
   e.preventDefault();
 
-  const adminToken = localStorage.getItem('adminToken');
-  if (!adminToken) {
+  if (!currentUser) {
     showMessage('Please log in as admin first.', 'error');
     return;
   }
@@ -52,29 +66,17 @@ async function handleSubmit(e) {
     water_bottle_twice: formData.get('water_bottle_twice') === 'on',
     work_done: formData.get('work_done') === 'on',
     volunteer_done: formData.get('volunteer_done') === 'on',
-    volunteer_hours: parseFloat(formData.get('volunteer_hours')) || 0
+    volunteer_hours: parseFloat(formData.get('volunteer_hours')) || 0,
+    created_at: serverTimestamp()
   };
 
   try {
-    const response = await fetch('/api/entries', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
-      body: JSON.stringify(entry)
-    });
-
-    if (response.ok) {
-      showMessage('Entry saved successfully!', 'success');
-      e.target.reset();
-      // Reset date to today
-      const dateInput = document.getElementById('date');
-      dateInput.value = new Date().toISOString().split('T')[0];
-    } else {
-      const error = await response.json();
-      showMessage(error.error || 'Failed to save entry', 'error');
-    }
+    await addDoc(collection(db, 'entries'), entry);
+    showMessage('Entry saved successfully!', 'success');
+    e.target.reset();
+    // Reset date to today
+    const dateInput = document.getElementById('date');
+    dateInput.value = new Date().toISOString().split('T')[0];
   } catch (error) {
     console.error('Error:', error);
     showMessage('Failed to save entry. Please try again.', 'error');
