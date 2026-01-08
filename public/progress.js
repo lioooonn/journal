@@ -171,12 +171,25 @@ function displayEntries(entries) {
 }
 
 function formatDate(dateStr) {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  // Parse YYYY-MM-DD as a local date to avoid timezone shifting it back one day
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) {
+    const fallback = new Date(dateStr);
+    return fallback.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }
+  const [year, month, day] = parts.map(p => parseInt(p, 10));
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
 }
 
