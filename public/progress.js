@@ -54,6 +54,22 @@ function displayStatistics(stats) {
       <div class="stat-value">${stats.avgSleep.toFixed(1)}h</div>
       <div class="stat-label">Avg Sleep</div>
     </div>
+    <div class="stat-card">
+      <div class="stat-value">${stats.workDays}</div>
+      <div class="stat-label">Work Days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">$${stats.totalEarnings}</div>
+      <div class="stat-label">Total Earned</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${stats.volunteerDays}</div>
+      <div class="stat-label">Volunteer Days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${stats.volunteerHours}</div>
+      <div class="stat-label">Volunteer Hours</div>
+    </div>
   `;
 
   // Activity chart
@@ -82,6 +98,7 @@ function displayStatistics(stats) {
 
 function displayEntries(entries) {
   const entriesList = document.getElementById('entries-list');
+  const adminToken = localStorage.getItem('adminToken');
   
   if (entries.length === 0) {
     entriesList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">No entries yet. Start tracking your progress!</p>';
@@ -92,7 +109,8 @@ function displayEntries(entries) {
     const details = [];
     
     if (entry.activity_type) {
-      details.push(`<div><strong>Activity:</strong> ${entry.activity_type}${entry.activity_amount ? ` (${entry.activity_amount})` : ''}</div>`);
+      const name = entry.activity_type === 'Other' && entry.activity_other ? entry.activity_other : entry.activity_type;
+      details.push(`<div><strong>Activity:</strong> ${name}${entry.activity_amount ? ` (${entry.activity_amount})` : ''}</div>`);
     }
     if (entry.sugar_consumed > 0) {
       details.push(`<div><strong>Sugar:</strong> ${entry.sugar_consumed}g</div>`);
@@ -112,6 +130,12 @@ function displayEntries(entries) {
     if (entry.water_bottle_twice) {
       details.push(`<div><strong>Water:</strong> ✓ (2x bottle)</div>`);
     }
+    if (entry.work_done) {
+      details.push(`<div><strong>Work:</strong> ✓ (+$45)</div>`);
+    }
+    if (entry.volunteer_done) {
+      details.push(`<div><strong>Volunteer:</strong> ✓${entry.volunteer_hours ? ` (${entry.volunteer_hours}h)` : ''}</div>`);
+    }
 
     return `
       <div class="entry-item">
@@ -119,9 +143,31 @@ function displayEntries(entries) {
         <div class="entry-details">
           ${details.join('')}
         </div>
+        ${adminToken ? `
+          <div style="margin-top: 10px; display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn" style="padding:10px 20px; width:auto; background:#667eea;" data-action="edit" data-id="${entry.id}">Edit</button>
+            <button class="btn" style="padding:10px 20px; width:auto; background:#d9534f;" data-action="delete" data-id="${entry.id}">Delete</button>
+          </div>
+        ` : ''}
       </div>
     `;
   }).join('');
+
+  if (adminToken) {
+    entriesList.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const entry = entries.find(e => String(e.id) === String(id));
+        if (entry) handleEdit(entry);
+      });
+    });
+    entriesList.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        handleDelete(id);
+      });
+    });
+  }
 }
 
 function formatDate(dateStr) {
@@ -132,4 +178,82 @@ function formatDate(dateStr) {
     month: 'long', 
     day: 'numeric' 
   });
+}
+
+async function handleEdit(entry) {
+  const adminToken = localStorage.getItem('adminToken');
+  if (!adminToken) {
+    alert('Login as admin first.');
+    return;
+  }
+
+  const updated = { ...entry };
+  updated.date = prompt('Date (YYYY-MM-DD):', entry.date) || entry.date;
+  const actType = prompt('Activity type (Gym/Sport/Run/Bike/Pushups/Sit-ups/Other):', entry.activity_type || '') || entry.activity_type;
+  updated.activity_type = actType || null;
+  if (updated.activity_type === 'Other') {
+    updated.activity_other = prompt('Activity name (for Other):', entry.activity_other || '') || entry.activity_other || null;
+  } else {
+    updated.activity_other = null;
+  }
+  updated.activity_amount = prompt('Activity amount:', entry.activity_amount || '') || entry.activity_amount || null;
+  const sugar = prompt('Sugar consumed (grams):', entry.sugar_consumed || 0);
+  updated.sugar_consumed = sugar === null || sugar === '' ? entry.sugar_consumed : parseFloat(sugar) || 0;
+  const snacks = prompt('Snacks count:', entry.snacks_count || 0);
+  updated.snacks_count = snacks === null || snacks === '' ? entry.snacks_count : parseInt(snacks) || 0;
+  updated.sleep_time = prompt('Sleep time (HH:MM):', entry.sleep_time || '') || entry.sleep_time || null;
+  updated.wake_time = prompt('Wake time (HH:MM):', entry.wake_time || '') || entry.wake_time || null;
+  const studying = prompt('Studying done? (y/n):', entry.studying_done ? 'y' : 'n');
+  updated.studying_done = studying ? studying.toLowerCase().startsWith('y') : entry.studying_done;
+  updated.studying_length = prompt('Studying length:', entry.studying_length || '') || entry.studying_length || null;
+  updated.social_media_time = prompt('Social media time:', entry.social_media_time || '') || entry.social_media_time || null;
+  const water = prompt('Water bottle twice? (y/n):', entry.water_bottle_twice ? 'y' : 'n');
+  updated.water_bottle_twice = water ? water.toLowerCase().startsWith('y') : entry.water_bottle_twice;
+  const work = prompt('Worked today? (y/n):', entry.work_done ? 'y' : 'n');
+  updated.work_done = work ? work.toLowerCase().startsWith('y') : entry.work_done;
+  const vol = prompt('Volunteered today? (y/n):', entry.volunteer_done ? 'y' : 'n');
+  updated.volunteer_done = vol ? vol.toLowerCase().startsWith('y') : entry.volunteer_done;
+  const volHours = prompt('Volunteer hours:', entry.volunteer_hours || 0);
+  updated.volunteer_hours = volHours === null || volHours === '' ? entry.volunteer_hours : parseFloat(volHours) || 0;
+
+  try {
+    const response = await fetch(`/api/entries/${entry.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken
+      },
+      body: JSON.stringify(updated)
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update entry');
+    }
+    await loadEntries();
+    await loadStatistics();
+    alert('Entry updated');
+  } catch (error) {
+    console.error(error);
+    alert('Update failed');
+  }
+}
+
+async function handleDelete(id) {
+  const adminToken = localStorage.getItem('adminToken');
+  if (!adminToken) {
+    alert('Login as admin first.');
+    return;
+  }
+  if (!confirm('Delete this entry?')) return;
+  try {
+    const response = await fetch(`/api/entries/${id}`, {
+      method: 'DELETE',
+      headers: { 'x-admin-token': adminToken }
+    });
+    if (!response.ok) throw new Error('Failed to delete');
+    await loadEntries();
+    await loadStatistics();
+  } catch (error) {
+    console.error(error);
+    alert('Delete failed');
+  }
 }

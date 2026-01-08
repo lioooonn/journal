@@ -7,16 +7,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const form = document.getElementById('journalForm');
   form.addEventListener('submit', handleSubmit);
+
+  const activitySelect = document.getElementById('activity_type');
+  const activityOtherInput = document.getElementById('activity_other');
+  activitySelect.addEventListener('change', () => {
+    if (activitySelect.value === 'Other') {
+      activityOtherInput.style.display = 'block';
+    } else {
+      activityOtherInput.style.display = 'none';
+      activityOtherInput.value = '';
+    }
+  });
+
+  const volunteerCheckbox = document.getElementById('volunteer_done');
+  const volunteerHours = document.getElementById('volunteer_hours');
+  volunteerCheckbox.addEventListener('change', () => {
+    volunteerHours.style.display = volunteerCheckbox.checked ? 'block' : 'none';
+    if (!volunteerCheckbox.checked) volunteerHours.value = '';
+  });
 });
 
 async function handleSubmit(e) {
   e.preventDefault();
+
+  const adminToken = localStorage.getItem('adminToken');
+  if (!adminToken) {
+    showMessage('Please log in as admin first.', 'error');
+    return;
+  }
   
   const formData = new FormData(e.target);
   const entry = {
     date: formData.get('date'),
     activity_type: formData.get('activity_type') || null,
     activity_amount: formData.get('activity_amount') || null,
+    activity_other: formData.get('activity_type') === 'Other' ? (formData.get('activity_other') || null) : null,
     sugar_consumed: parseFloat(formData.get('sugar_consumed')) || 0,
     snacks_count: parseInt(formData.get('snacks_count')) || 0,
     sleep_time: formData.get('sleep_time') || null,
@@ -24,14 +49,18 @@ async function handleSubmit(e) {
     studying_done: formData.get('studying_done') === 'on',
     studying_length: formData.get('studying_length') || null,
     social_media_time: formData.get('social_media_time') || null,
-    water_bottle_twice: formData.get('water_bottle_twice') === 'on'
+    water_bottle_twice: formData.get('water_bottle_twice') === 'on',
+    work_done: formData.get('work_done') === 'on',
+    volunteer_done: formData.get('volunteer_done') === 'on',
+    volunteer_hours: parseFloat(formData.get('volunteer_hours')) || 0
   };
 
   try {
     const response = await fetch('/api/entries', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-admin-token': adminToken
       },
       body: JSON.stringify(entry)
     });

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🔒 Admin Login</h1>
+    <p class="subtitle">Only admins can create, edit, or delete entries.</p>
+
+    <div class="nav">
+      <a href="/">New Entry</a>
+      <a href="/progress">View Progress</a>
+      <a href="/login">Admin Login</a>
+    </div>
+
+    <div id="message"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="password">Admin Password</label>
+        <input type="password" id="password" name="password" required placeholder="Enter admin password">
+      </div>
+      <button type="submit" class="btn">Log In</button>
+    </form>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>
